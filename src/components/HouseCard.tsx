@@ -55,7 +55,7 @@ export const HouseCard: React.FC<HouseCardProps> = ({ house, onClick }) => {
         <div className="mt-4">
           <p className="text-xs opacity-75 mb-2">House Traits:</p>
           <div className="flex flex-wrap gap-1">
-            {house.traits.slice(0, 4).map((trait, index) => (
+            {(house.traits || []).slice(0, 4).map((trait, index) => (
               <span
                 key={index}
                 className="px-2 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs"
