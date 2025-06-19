@@ -1,204 +1,318 @@
 import React, { useState, useEffect } from 'react';
-import { Book } from './types/book';
-import { OpenLibraryAPI } from './services/openLibraryApi';
-import { SearchBar } from './components/SearchBar';
-import { BookGallery } from './components/BookGallery';
-import { GenreLandscape } from './components/GenreLandscape';
-import { BookModal } from './components/BookModal';
-import { AuthorTimeline } from './components/AuthorTimeline';
-import { BookOpen, Sparkles, TrendingUp, Loader2 } from 'lucide-react';
+import { HarryPotterAPI } from './services/harryPotterApi';
+import { Book, Character, House, Spell, Language } from './types/api';
+import { TabNavigation, TabType } from './components/TabNavigation';
+import { LanguageSelector } from './components/LanguageSelector';
+import { LoadingSpinner } from './components/LoadingSpinner';
+import { BookCard } from './components/BookCard';
+import { CharacterCard } from './components/CharacterCard';
+import { HouseCard } from './components/HouseCard';
+import { SpellCard } from './components/SpellCard';
+import { DetailModal } from './components/DetailModal';
+import { Sparkles, Shuffle, Wand2 } from 'lucide-react';
 
 function App() {
-  const [searchResults, setSearchResults] = useState<Book[]>([]);
-  const [trendingBooks, setTrendingBooks] = useState<Book[]>([]);
-  const [selectedGenreBooks, setSelectedGenreBooks] = useState<Book[]>([]);
-  const [selectedGenre, setSelectedGenre] = useState<string>('');
-  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
-  const [selectedAuthor, setSelectedAuthor] = useState<{ key: string; name: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<TabType>('books');
+  const [language, setLanguage] = useState<Language>('en');
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Data states
+  const [books, setBooks] = useState<Book[]>([]);
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [houses, setHouses] = useState<House[]>([]);
+  const [spells, setSpells] = useState<Spell[]>([]);
+  
+  // Random data states
+  const [randomBook, setRandomBook] = useState<Book | null>(null);
+  const [randomCharacter, setRandomCharacter] = useState<Character | null>(null);
+  const [randomHouse, setRandomHouse] = useState<House | null>(null);
+  const [randomSpell, setRandomSpell] = useState<Spell | null>(null);
+  
+  // Modal states
+  const [modalData, setModalData] = useState<Book | Character | House | Spell | null>(null);
+  const [modalType, setModalType] = useState<'book' | 'character' | 'house' | 'spell'>('book');
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
+    HarryPotterAPI.setLanguage(language);
     loadInitialData();
-  }, []);
+  }, [language]);
 
   const loadInitialData = async () => {
     try {
       setLoading(true);
       
-      // Load trending books
-      const trending = await OpenLibraryAPI.getTrendingBooks();
-      setTrendingBooks(trending);
+      // Load all data in parallel
+      const [booksData, charactersData, housesData, spellsData] = await Promise.all([
+        HarryPotterAPI.getAllBooks(),
+        HarryPotterAPI.getAllCharacters(),
+        HarryPotterAPI.getAllHouses(),
+        HarryPotterAPI.getAllSpells(),
+      ]);
       
-      // Load some popular fiction books as featured
-      const fictionResponse = await OpenLibraryAPI.getBooksBySubject('fiction', 20);
-      const fictionBooks = fictionResponse.docs.filter(book => book.cover_i);
-      setSelectedGenreBooks(fictionBooks);
-      setSelectedGenre('fiction');
+      setBooks(booksData);
+      setCharacters(charactersData);
+      setHouses(housesData);
+      setSpells(spellsData);
+      
+      // Load random items
+      loadRandomItems();
       
     } catch (error) {
-      console.error('Failed to load initial data:', error);
+      console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSearch = async (query: string) => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      setSearchQuery('');
-      return;
-    }
-
+  const loadRandomItems = async () => {
     try {
-      setSearchQuery(query);
-      const response = await OpenLibraryAPI.searchBooks(query, 20);
-      const booksWithCovers = response.docs.filter(book => book.cover_i);
-      setSearchResults(booksWithCovers);
+      const [randomBookData, randomCharacterData, randomHouseData, randomSpellData] = await Promise.all([
+        HarryPotterAPI.getRandomBook(),
+        HarryPotterAPI.getRandomCharacter(),
+        HarryPotterAPI.getRandomHouse(),
+        HarryPotterAPI.getRandomSpell(),
+      ]);
+      
+      setRandomBook(randomBookData);
+      setRandomCharacter(randomCharacterData);
+      setRandomHouse(randomHouseData);
+      setRandomSpell(randomSpellData);
     } catch (error) {
-      console.error('Search failed:', error);
-      setSearchResults([]);
+      console.error('Failed to load random items:', error);
     }
   };
 
-  const handleGenreSelect = async (genre: string) => {
-    try {
-      setSelectedGenre(genre);
-      const response = await OpenLibraryAPI.getBooksBySubject(genre, 20);
-      const booksWithCovers = response.docs.filter(book => book.cover_i);
-      setSelectedGenreBooks(booksWithCovers);
-    } catch (error) {
-      console.error('Failed to load genre books:', error);
+  const handleItemClick = (item: Book | Character | House | Spell, type: 'book' | 'character' | 'house' | 'spell') => {
+    setModalData(item);
+    setModalType(type);
+    setIsModalOpen(true);
+  };
+
+  const renderTabContent = () => {
+    if (loading) {
+      return <LoadingSpinner />;
     }
-  };
 
-  const handleBookClick = (book: Book) => {
-    setSelectedBook(book);
-  };
-
-  const handleAuthorClick = (authorKey: string, authorName: string) => {
-    setSelectedAuthor({ key: authorKey, name: authorName });
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Loading your literary journey...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-100 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-center space-x-3 mb-6">
-            <div className="p-3 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl">
-              <BookOpen className="w-8 h-8 text-white" />
-            </div>
+    switch (activeTab) {
+      case 'books':
+        return (
+          <div className="space-y-6">
+            {randomBook && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
+                    <Shuffle className="w-5 h-5 text-purple-600" />
+                    <span>Random Book</span>
+                  </h2>
+                  <button
+                    onClick={loadRandomItems}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                  >
+                    New Random
+                  </button>
+                </div>
+                <BookCard
+                  book={randomBook}
+                  onClick={() => handleItemClick(randomBook, 'book')}
+                />
+              </div>
+            )}
+            
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                BookScope
-              </h1>
-              <p className="text-gray-600 text-sm">Visual Book Explorer</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">All Books</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {books.map((book, index) => (
+                  <BookCard
+                    key={index}
+                    book={book}
+                    onClick={() => handleItemClick(book, 'book')}
+                  />
+                ))}
+              </div>
             </div>
           </div>
-          
-          <SearchBar onSearch={handleSearch} />
+        );
+
+      case 'characters':
+        return (
+          <div className="space-y-6">
+            {randomCharacter && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
+                    <Shuffle className="w-5 h-5 text-purple-600" />
+                    <span>Random Character</span>
+                  </h2>
+                  <button
+                    onClick={loadRandomItems}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                  >
+                    New Random
+                  </button>
+                </div>
+                <CharacterCard
+                  character={randomCharacter}
+                  onClick={() => handleItemClick(randomCharacter, 'character')}
+                />
+              </div>
+            )}
+            
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">All Characters</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {characters.map((character, index) => (
+                  <CharacterCard
+                    key={index}
+                    character={character}
+                    onClick={() => handleItemClick(character, 'character')}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'houses':
+        return (
+          <div className="space-y-6">
+            {randomHouse && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
+                    <Shuffle className="w-5 h-5 text-purple-600" />
+                    <span>Random House</span>
+                  </h2>
+                  <button
+                    onClick={loadRandomItems}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                  >
+                    New Random
+                  </button>
+                </div>
+                <HouseCard
+                  house={randomHouse}
+                  onClick={() => handleItemClick(randomHouse, 'house')}
+                />
+              </div>
+            )}
+            
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Hogwarts Houses</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {houses.map((house, index) => (
+                  <HouseCard
+                    key={index}
+                    house={house}
+                    onClick={() => handleItemClick(house, 'house')}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'spells':
+        return (
+          <div className="space-y-6">
+            {randomSpell && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
+                    <Shuffle className="w-5 h-5 text-purple-600" />
+                    <span>Random Spell</span>
+                  </h2>
+                  <button
+                    onClick={loadRandomItems}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                  >
+                    New Random
+                  </button>
+                </div>
+                <SpellCard
+                  spell={randomSpell}
+                  onClick={() => handleItemClick(randomSpell, 'spell')}
+                />
+              </div>
+            )}
+            
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">All Spells</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {spells.map((spell, index) => (
+                  <SpellCard
+                    key={index}
+                    spell={spell}
+                    onClick={() => handleItemClick(spell, 'spell')}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50">
+      {/* Header */}
+      <header className="bg-gradient-to-r from-purple-600 via-purple-700 to-indigo-700 text-white sticky top-0 z-40 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
+                <Wand2 className="w-8 h-8" />
+              </div>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold">
+                  Wizarding World Explorer
+                </h1>
+                <p className="text-purple-200 text-sm hidden md:block">
+                  Discover the magic of Harry Potter
+                </p>
+              </div>
+            </div>
+            
+            <LanguageSelector
+              currentLanguage={language}
+              onLanguageChange={setLanguage}
+            />
+          </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        {/* Search Results */}
-        {searchResults.length > 0 && (
-          <BookGallery
-            title={`Search Results for "${searchQuery}"`}
-            books={searchResults}
-            onBookClick={handleBookClick}
-          />
-        )}
-
-        {/* Genre Landscape */}
-        {searchResults.length === 0 && (
-          <GenreLandscape onGenreSelect={handleGenreSelect} />
-        )}
-
-        {/* Trending Books */}
-        {searchResults.length === 0 && trendingBooks.length > 0 && (
-          <BookGallery
-            title="Trending Now"
-            books={trendingBooks}
-            onBookClick={handleBookClick}
-          />
-        )}
-
-        {/* Selected Genre Books */}
-        {searchResults.length === 0 && selectedGenreBooks.length > 0 && (
-          <BookGallery
-            title={`${selectedGenre.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Collection`}
-            books={selectedGenreBooks}
-            onBookClick={handleBookClick}
-          />
-        )}
-
-        {/* Popular Genres */}
-        {searchResults.length === 0 && (
-          <>
-            <BookGallery
-              title="Fantasy Adventures"
-              genre="fantasy"
-              onBookClick={handleBookClick}
-            />
-            <BookGallery
-              title="Science Fiction Worlds"
-              genre="science_fiction"
-              onBookClick={handleBookClick}
-            />
-            <BookGallery
-              title="Mystery & Thriller"
-              genre="mystery"
-              onBookClick={handleBookClick}
-            />
-          </>
-        )}
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 py-8 pb-24">
+        {renderTabContent()}
       </main>
 
-      {/* Book Modal */}
-      {selectedBook && (
-        <BookModal
-          book={selectedBook}
-          isOpen={!!selectedBook}
-          onClose={() => setSelectedBook(null)}
+      {/* Bottom Navigation */}
+      <div className="fixed bottom-0 left-0 right-0 z-40">
+        <TabNavigation
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
         />
-      )}
+      </div>
 
-      {/* Author Timeline Modal */}
-      {selectedAuthor && (
-        <AuthorTimeline
-          authorKey={selectedAuthor.key}
-          authorName={selectedAuthor.name}
-          onClose={() => setSelectedAuthor(null)}
-        />
-      )}
+      {/* Detail Modal */}
+      <DetailModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        data={modalData}
+        type={modalType}
+      />
 
-      {/* Footer */}
-      <footer className="bg-white/50 backdrop-blur-sm border-t border-gray-100 mt-16">
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="text-center">
-            <div className="flex items-center justify-center space-x-2 mb-4">
-              <Sparkles className="w-5 h-5 text-blue-600" />
-              <span className="text-gray-600">Powered by Open Library API</span>
-            </div>
-            <p className="text-gray-500 text-sm">
-              Discover your next favorite book through visual exploration
-            </p>
-          </div>
-        </div>
-      </footer>
+      {/* Floating Action Button for Random */}
+      <button
+        onClick={loadRandomItems}
+        className="fixed bottom-20 right-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 z-30"
+        title="Get Random Items"
+      >
+        <Sparkles className="w-6 h-6" />
+      </button>
     </div>
   );
 }
